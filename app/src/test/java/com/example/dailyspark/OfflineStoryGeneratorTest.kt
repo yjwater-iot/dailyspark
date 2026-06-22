@@ -17,6 +17,7 @@ class OfflineStoryGeneratorTest {
             draft.followUpQuestion
         )
         assertTrue(draft.storySeed.contains("A character pauses over this detail:"))
+        assertTrue(draft.generatedStory.contains("Today, you noticed The rain sounded bright on the windows the cat watched quietly"))
         assertTrue(draft.storySeed.split(Regex("\\s+")).size <= 150)
     }
 

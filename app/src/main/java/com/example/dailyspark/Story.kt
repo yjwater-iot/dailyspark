@@ -10,5 +10,6 @@ data class Story(
     val cleanedObservation: String,
     val followUpQuestion: String,
     val storySeed: String,
+    val generatedStory: String,
     val createdAtMillis: Long
 )

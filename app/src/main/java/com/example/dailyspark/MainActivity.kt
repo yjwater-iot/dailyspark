@@ -60,10 +60,11 @@ private fun DailySparkApp() {
     val repository = remember {
         StoryRepository(DailySparkDatabase.getInstance(context).storyDao())
     }
-    var transcript by remember { mutableStateOf("Tap Talk and share what you noticed today.") }
+    var transcript by remember { mutableStateOf(INITIAL_TRANSCRIPT) }
     var cleanedObservation by remember { mutableStateOf("") }
     var followUpQuestion by remember { mutableStateOf("") }
     var storySeed by remember { mutableStateOf("") }
+    var generatedStory by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Ready") }
     var hasAudioPermission by remember {
         mutableStateOf(
@@ -113,6 +114,12 @@ private fun DailySparkApp() {
                 cleanedObservation = latestStory.cleanedObservation
                 followUpQuestion = latestStory.followUpQuestion
                 storySeed = latestStory.storySeed
+                generatedStory = latestStory.generatedStory
+            } ?: run {
+                cleanedObservation = ""
+                followUpQuestion = ""
+                storySeed = ""
+                generatedStory = ""
             }
         }
     }
@@ -127,6 +134,7 @@ private fun DailySparkApp() {
             cleanedObservation = cleanedObservation,
             followUpQuestion = followUpQuestion,
             storySeed = storySeed,
+            generatedStory = generatedStory,
             status = status,
             onTalk = {
                 if (hasAudioPermission) {
@@ -136,10 +144,18 @@ private fun DailySparkApp() {
                 }
             },
             onStoryBuilding = {
-                val story = buildGeneratedStory(transcript)
+                val story = generatedStory.ifBlank { buildGeneratedStory(transcript) }
                 status = "Playing generated story…"
                 voiceManager.speakStory(story)
             },
+            onClearAllRecords = {
+                scope.launch {
+                    repository.clearAllRecords()
+                    transcript = INITIAL_TRANSCRIPT
+                    status = "All records cleared."
+                }
+            },
+            showDebugControls = BuildConfig.DEBUG,
             modifier = Modifier.padding(innerPadding)
         )
     }
@@ -151,9 +167,12 @@ private fun DailySparkScreen(
     cleanedObservation: String,
     followUpQuestion: String,
     storySeed: String,
+    generatedStory: String,
     status: String,
     onTalk: () -> Unit,
     onStoryBuilding: () -> Unit,
+    onClearAllRecords: () -> Unit,
+    showDebugControls: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -187,6 +206,17 @@ private fun DailySparkScreen(
         ) {
             Text(text = "Story Building", fontSize = 24.sp)
         }
+        if (showDebugControls) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onClearAllRecords,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
+                Text(text = "Clear all records", fontSize = 18.sp)
+            }
+        }
         Spacer(modifier = Modifier.height(24.dp))
         Text(text = status, style = MaterialTheme.typography.labelLarge)
         Spacer(modifier = Modifier.height(16.dp))
@@ -198,6 +228,8 @@ private fun DailySparkScreen(
             LabeledText(label = "Follow-up question", text = followUpQuestion)
             Spacer(modifier = Modifier.height(16.dp))
             LabeledText(label = "Story seed", text = storySeed)
+            Spacer(modifier = Modifier.height(16.dp))
+            LabeledText(label = "Generated story", text = generatedStory)
         }
     }
 }
@@ -226,9 +258,11 @@ private fun LabeledText(
 
 private fun buildGeneratedStory(transcript: String): String {
     val detail = transcript.trim()
-    return if (detail.isBlank() || detail == "Tap Talk and share what you noticed today.") {
+    return if (detail.isBlank() || detail == INITIAL_TRANSCRIPT) {
         "Your DailySpark story is ready when you share what you noticed today. Tap Talk, tell me a small moment, then tap Story Building to listen."
     } else {
         "Here is your DailySpark story. Today, you noticed $detail. That small spark became a bright reminder to pause, wonder, and carry a little more attention into the rest of your day."
     }
 }
+
+private const val INITIAL_TRANSCRIPT = "Tap Talk and share what you noticed today."
