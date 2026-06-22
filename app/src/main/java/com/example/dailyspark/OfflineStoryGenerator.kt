@@ -5,11 +5,13 @@ class OfflineStoryGenerator {
         val cleanedObservation = cleanObservation(rawTranscriptSinceYesterday)
         val followUpQuestion = buildFollowUpQuestion(cleanedObservation)
         val storySeed = buildStorySeed(cleanedObservation)
+        val generatedStory = buildGeneratedStory(cleanedObservation)
 
         return StoryDraft(
             cleanedObservation = cleanedObservation,
             followUpQuestion = followUpQuestion,
-            storySeed = storySeed
+            storySeed = storySeed,
+            generatedStory = generatedStory
         )
     }
 
@@ -58,6 +60,14 @@ class OfflineStoryGenerator {
         return seed.limitToWords(MAX_STORY_SEED_WORDS)
     }
 
+    private fun buildGeneratedStory(cleanedObservation: String): String {
+        val detail = cleanedObservation
+            .trim()
+            .removeSuffix(".")
+
+        return "Here is your DailySpark story. Today, you noticed $detail. That small spark became a bright reminder to pause, wonder, and carry a little more attention into the rest of your day."
+    }
+
     private fun String.limitToWords(maxWords: Int): String {
         val words = trim().split(WHITESPACE_REGEX).filter { it.isNotBlank() }
         return if (words.size <= maxWords) {
@@ -78,5 +88,6 @@ class OfflineStoryGenerator {
 data class StoryDraft(
     val cleanedObservation: String,
     val followUpQuestion: String,
-    val storySeed: String
+    val storySeed: String,
+    val generatedStory: String
 )

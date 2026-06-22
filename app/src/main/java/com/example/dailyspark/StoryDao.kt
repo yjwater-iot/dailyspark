@@ -15,4 +15,7 @@ interface StoryDao {
 
     @Query("SELECT transcript FROM stories WHERE createdAtMillis >= :sinceMillis ORDER BY createdAtMillis ASC")
     suspend fun transcriptsSince(sinceMillis: Long): List<String>
+
+    @Query("DELETE FROM stories")
+    suspend fun deleteAll()
 }
