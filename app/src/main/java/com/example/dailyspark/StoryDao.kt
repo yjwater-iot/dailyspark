@@ -12,4 +12,7 @@ interface StoryDao {
 
     @Query("SELECT * FROM stories ORDER BY createdAtMillis DESC")
     fun observeStories(): Flow<List<Story>>
+
+    @Query("SELECT transcript FROM stories WHERE createdAtMillis >= :sinceMillis ORDER BY createdAtMillis ASC")
+    suspend fun transcriptsSince(sinceMillis: Long): List<String>
 }
