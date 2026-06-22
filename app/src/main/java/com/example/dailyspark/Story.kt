@@ -7,5 +7,8 @@ import androidx.room.PrimaryKey
 data class Story(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val transcript: String,
+    val cleanedObservation: String,
+    val followUpQuestion: String,
+    val storySeed: String,
     val createdAtMillis: Long
 )

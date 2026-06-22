@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -59,6 +61,9 @@ private fun DailySparkApp() {
         StoryRepository(DailySparkDatabase.getInstance(context).storyDao())
     }
     var transcript by remember { mutableStateOf("Tap Talk and share what you noticed today.") }
+    var cleanedObservation by remember { mutableStateOf("") }
+    var followUpQuestion by remember { mutableStateOf("") }
+    var storySeed by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Ready") }
     var hasAudioPermission by remember {
         mutableStateOf(
@@ -99,6 +104,16 @@ private fun DailySparkApp() {
         }
     }
 
+    LaunchedEffect(repository) {
+        repository.stories.collect { stories ->
+            stories.firstOrNull()?.let { latestStory ->
+                cleanedObservation = latestStory.cleanedObservation
+                followUpQuestion = latestStory.followUpQuestion
+                storySeed = latestStory.storySeed
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose { voiceManager.shutdown() }
     }
@@ -106,6 +121,9 @@ private fun DailySparkApp() {
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         DailySparkScreen(
             transcript = transcript,
+            cleanedObservation = cleanedObservation,
+            followUpQuestion = followUpQuestion,
+            storySeed = storySeed,
             status = status,
             onTalk = {
                 if (hasAudioPermission) {
@@ -122,6 +140,9 @@ private fun DailySparkApp() {
 @Composable
 private fun DailySparkScreen(
     transcript: String,
+    cleanedObservation: String,
+    followUpQuestion: String,
+    storySeed: String,
     status: String,
     onTalk: () -> Unit,
     modifier: Modifier = Modifier
@@ -129,6 +150,7 @@ private fun DailySparkScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -150,8 +172,33 @@ private fun DailySparkScreen(
         Spacer(modifier = Modifier.height(24.dp))
         Text(text = status, style = MaterialTheme.typography.labelLarge)
         Spacer(modifier = Modifier.height(16.dp))
+        LabeledText(label = "Raw transcript", text = transcript)
+        if (cleanedObservation.isNotBlank()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            LabeledText(label = "Cleaned observation", text = cleanedObservation)
+            Spacer(modifier = Modifier.height(16.dp))
+            LabeledText(label = "Follow-up question", text = followUpQuestion)
+            Spacer(modifier = Modifier.height(16.dp))
+            LabeledText(label = "Story seed", text = storySeed)
+        }
+    }
+}
+
+@Composable
+private fun LabeledText(
+    label: String,
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = transcript,
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = text,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
