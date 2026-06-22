@@ -74,7 +74,10 @@ private fun DailySparkApp() {
     val voiceManager = remember {
         VoiceManager(
             context = context,
-            onTranscript = { spokenText ->
+            onSessionTranscript = { spokenText ->
+                transcript = spokenText.ifBlank { "Listening for your observation…" }
+            },
+            onSessionComplete = { spokenText ->
                 transcript = spokenText.ifBlank { "No speech captured." }
                 scope.launch { repository.saveTranscript(spokenText) }
             },
