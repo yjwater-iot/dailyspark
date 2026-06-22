@@ -108,6 +108,19 @@ class VoiceManager(
         speakPrompt()
     }
 
+    fun speakStory(story: String) {
+        if (story.isBlank()) {
+            onError("There is no story to play yet.")
+            return
+        }
+        textToSpeech?.speak(
+            story,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            STORY_UTTERANCE_ID
+        ) ?: onError("Text to speech is not available on this device.")
+    }
+
     private fun startSpeechRecognizer() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -131,6 +144,7 @@ class VoiceManager(
     private companion object {
         const val PROMPT_TEXT = "What small thing did you notice today?"
         const val PROMPT_UTTERANCE_ID = "daily-spark-prompt"
+        const val STORY_UTTERANCE_ID = "daily-spark-story"
         const val MINIMUM_LISTENING_MILLIS = 5_000L
     }
 }

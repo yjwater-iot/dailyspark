@@ -132,6 +132,11 @@ private fun DailySparkApp() {
                     audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 }
             },
+            onStoryBuilding = {
+                val story = buildGeneratedStory(transcript)
+                status = "Playing generated story…"
+                voiceManager.speakStory(story)
+            },
             modifier = Modifier.padding(innerPadding)
         )
     }
@@ -145,6 +150,7 @@ private fun DailySparkScreen(
     storySeed: String,
     status: String,
     onTalk: () -> Unit,
+    onStoryBuilding: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -168,6 +174,15 @@ private fun DailySparkScreen(
                 .height(96.dp)
         ) {
             Text(text = "Talk", fontSize = 32.sp)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = onStoryBuilding,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+        ) {
+            Text(text = "Story Building", fontSize = 24.sp)
         }
         Spacer(modifier = Modifier.height(24.dp))
         Text(text = status, style = MaterialTheme.typography.labelLarge)
@@ -203,5 +218,14 @@ private fun LabeledText(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+private fun buildGeneratedStory(transcript: String): String {
+    val detail = transcript.trim()
+    return if (detail.isBlank() || detail == "Tap Talk and share what you noticed today.") {
+        "Your DailySpark story is ready when you share what you noticed today. Tap Talk, tell me a small moment, then tap Story Building to listen."
+    } else {
+        "Here is your DailySpark story. Today, you noticed $detail. That small spark became a bright reminder to pause, wonder, and carry a little more attention into the rest of your day."
     }
 }
