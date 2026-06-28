@@ -28,12 +28,10 @@ class VoiceManager(
     private var listeningStartedAt = 0L
     private var sessionTranscript = ""
     private var consecutiveNoSpeechTimeouts = 0
+    private var recognizerPrompt = DEFAULT_RECOGNIZER_PROMPT
+    private var finishAfterFirstResult = false
+    private val utteranceCallbacks = mutableMapOf<String, () -> Unit>()
 
-    private val maxSessionDurationRunnable = Runnable {
-        if (isSessionActive) {
-            stopDictationSession()
-        }
-    }
 
     init {
         speechRecognizer.setRecognitionListener(object : RecognitionListener {
@@ -61,11 +59,7 @@ class VoiceManager(
                 finishListeningAfterMinimum {
                     if (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_NO_MATCH) {
                         consecutiveNoSpeechTimeouts += 1
-                        if (consecutiveNoSpeechTimeouts >= MAX_CONSECUTIVE_NO_SPEECH_TIMEOUTS) {
-                            stopDictationSession()
-                        } else {
-                            speakAnythingToAddPrompt()
-                        }
+                        speakAnythingToAddPrompt()
                     } else {
                         onError("Speech recognition error: $error")
                         if (isSessionActive) {
@@ -82,13 +76,18 @@ class VoiceManager(
                         handleNoSpeechFinalResult()
                     } else {
                         consecutiveNoSpeechTimeouts = 0
-                        sessionTranscript = combineTranscript(sessionTranscript, transcript)
-                        onSessionTranscript(sessionTranscript)
-
-                        if (transcript.isStopCommand()) {
+                        if (finishAfterFirstResult) {
+                            sessionTranscript = combineTranscript(sessionTranscript, transcript)
+                            onSessionTranscript(sessionTranscript)
                             stopDictationSession()
-                        } else if (isSessionActive) {
-                            speakAnythingToAddPrompt()
+                        } else if (transcript.isStopCommand()) {
+                            stopDictationSession()
+                        } else {
+                            sessionTranscript = combineTranscript(sessionTranscript, transcript)
+                            onSessionTranscript(sessionTranscript)
+                            if (isSessionActive) {
+                                speakAnythingToAddPrompt()
+                            }
                         }
                     }
                 }
@@ -104,15 +103,27 @@ class VoiceManager(
             override fun onStart(utteranceId: String?) = Unit
 
             override fun onDone(utteranceId: String?) {
-                if (utteranceId == ANYTHING_TO_ADD_UTTERANCE_ID && isSessionActive) {
-                    mainHandler.post { restartListening() }
+                when {
+                    utteranceId == ANYTHING_TO_ADD_UTTERANCE_ID && isSessionActive -> {
+                        mainHandler.post { restartListening() }
+                    }
+                    utteranceCallbacks.containsKey(utteranceId) -> {
+                        val callback = utteranceCallbacks.remove(utteranceId)
+                        mainHandler.post { callback?.invoke() }
+                    }
                 }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                if (utteranceId == ANYTHING_TO_ADD_UTTERANCE_ID && isSessionActive) {
-                    mainHandler.post { restartListening() }
+                when {
+                    utteranceId == ANYTHING_TO_ADD_UTTERANCE_ID && isSessionActive -> {
+                        mainHandler.post { restartListening() }
+                    }
+                    utteranceCallbacks.containsKey(utteranceId) -> {
+                        val callback = utteranceCallbacks.remove(utteranceId)
+                        mainHandler.post { callback?.invoke() }
+                    }
                 }
             }
         })
@@ -137,7 +148,7 @@ class VoiceManager(
         ) ?: restartListening()
     }
 
-    fun startListening() {
+    fun startListening(prompt: String = DEFAULT_RECOGNIZER_PROMPT, finishAfterFirstResult: Boolean = false) {
         if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
             onError("Speech recognition is not available on this device.")
             return
@@ -145,12 +156,31 @@ class VoiceManager(
         if (isSessionActive || isListening) return
 
         sessionTranscript = ""
+        recognizerPrompt = prompt
+        this.finishAfterFirstResult = finishAfterFirstResult
         consecutiveNoSpeechTimeouts = 0
         isSessionActive = true
         onSessionTranscript("")
-        mainHandler.removeCallbacks(maxSessionDurationRunnable)
-        mainHandler.postDelayed(maxSessionDurationRunnable, MAX_SESSION_DURATION_MILLIS)
         restartListening()
+    }
+
+    fun speak(message: String, onDone: () -> Unit = {}) {
+        val utteranceId = "daily-spark-spoken-${System.currentTimeMillis()}"
+        utteranceCallbacks[utteranceId] = onDone
+        textToSpeech?.speak(
+            message,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            utteranceId
+        ) ?: run {
+            utteranceCallbacks.remove(utteranceId)
+            onError("Text to speech is not available on this device.")
+            onDone()
+        }
+    }
+
+    fun speakThenListen(message: String, prompt: String = DEFAULT_RECOGNIZER_PROMPT, finishAfterFirstResult: Boolean = false) {
+        speak(message) { startListening(prompt, finishAfterFirstResult) }
     }
 
     fun speakStory(story: String) {
@@ -175,7 +205,7 @@ class VoiceManager(
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Tell DailySpark what you noticed today")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, recognizerPrompt)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, MINIMUM_LISTENING_MILLIS)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, MINIMUM_LISTENING_MILLIS)
@@ -186,17 +216,12 @@ class VoiceManager(
 
     private fun handleNoSpeechFinalResult() {
         consecutiveNoSpeechTimeouts += 1
-        if (consecutiveNoSpeechTimeouts >= MAX_CONSECUTIVE_NO_SPEECH_TIMEOUTS) {
-            stopDictationSession()
-        } else {
-            speakAnythingToAddPrompt()
-        }
+        speakAnythingToAddPrompt()
     }
 
     private fun stopDictationSession() {
         if (!isSessionActive) return
         isSessionActive = false
-        mainHandler.removeCallbacks(maxSessionDurationRunnable)
         textToSpeech?.stop()
         if (isListening) {
             speechRecognizer.cancel()
@@ -233,12 +258,11 @@ class VoiceManager(
     }
 
     private companion object {
-        const val ANYTHING_TO_ADD_PROMPT_TEXT = "还有想补充的吗？没有的话可以说完了。"
+        const val ANYTHING_TO_ADD_PROMPT_TEXT = "I am listening. If you are done, please say finished."
         const val ANYTHING_TO_ADD_UTTERANCE_ID = "daily-spark-anything-to-add"
         const val STORY_UTTERANCE_ID = "daily-spark-story"
         const val MINIMUM_LISTENING_MILLIS = 5_000L
-        const val MAX_SESSION_DURATION_MILLIS = 60_000L
-        const val MAX_CONSECUTIVE_NO_SPEECH_TIMEOUTS = 2
-        val STOP_COMMANDS = setOf("完了", "就这样", "没有了", "done", "that'sit")
+        const val DEFAULT_RECOGNIZER_PROMPT = "DailySpark is listening"
+        val STOP_COMMANDS = setOf("finished")
     }
 }
